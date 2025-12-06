@@ -101,6 +101,41 @@ const ExtractionResults = ({ data }: ExtractionResultsProps) => {
     toast({ title: "CSV downloaded" });
   };
 
+  const handleDownloadTablesCsv = () => {
+    if (!normalized.tables || normalized.tables.length === 0) return;
+    
+    // Create a combined CSV with all tables
+    let csvContent = "";
+    
+    normalized.tables.forEach((table, tableIndex) => {
+      csvContent += `\n# ${table.tableId}${table.caption ? ` - ${table.caption}` : ''}\n`;
+      csvContent += `# Type: ${table.dataType}, Confidence: ${Math.round(table.confidence * 100)}%\n`;
+      
+      // Add headers
+      csvContent += table.headers.map(h => `"${h}"`).join(",") + "\n";
+      
+      // Add rows
+      table.rows.forEach(row => {
+        csvContent += row.cells.map(cell => {
+          const value = cell.numericValue !== null ? cell.numericValue : cell.value;
+          const unit = cell.unit ? ` ${cell.unit}` : '';
+          return `"${value}${unit}"`;
+        }).join(",") + "\n";
+      });
+    });
+    
+    const blob = new Blob([csvContent.trim()], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `tables-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({ title: "Tables CSV downloaded" });
+  };
+
   return (
     <div className="space-y-4">
       {/* Header with actions */}
@@ -125,6 +160,12 @@ const ExtractionResults = ({ data }: ExtractionResultsProps) => {
             <Button variant="outline" size="sm" onClick={handleDownloadCsv}>
               <Download className="h-4 w-4 mr-1" />
               CSV
+            </Button>
+          )}
+          {normalized.tables && normalized.tables.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleDownloadTablesCsv}>
+              <Download className="h-4 w-4 mr-1" />
+              Tables
             </Button>
           )}
         </div>
@@ -279,6 +320,65 @@ const ExtractionResults = ({ data }: ExtractionResultsProps) => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </CollapsibleSection>
+      )}
+
+      {/* Tables */}
+      {normalized.tables && normalized.tables.length > 0 && (
+        <CollapsibleSection title={`Extracted Tables (${normalized.tables.length})`}>
+          <div className="space-y-6">
+            {normalized.tables.map((table, i) => (
+              <div key={i} className="rounded-lg border border-border overflow-hidden">
+                <div className="flex items-center justify-between bg-secondary/30 px-4 py-2">
+                  <div>
+                    <span className="font-medium text-foreground">{table.tableId}</span>
+                    {table.caption && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{table.caption}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">{table.dataType}</Badge>
+                    <ConfidenceBadge confidence={table.confidence} />
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-secondary/20">
+                        {table.headers.map((header, hi) => (
+                          <th key={hi} className="text-left py-2 px-3 text-xs font-medium text-muted-foreground uppercase">
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row, ri) => (
+                        <tr key={ri} className="border-b border-border/50">
+                          {row.cells.map((cell, ci) => (
+                            <td key={ci} className={`py-2 px-3 ${cell.isHeader ? 'font-medium' : ''}`}>
+                              <span className="text-foreground">{cell.value}</span>
+                              {cell.unit && (
+                                <span className="text-muted-foreground ml-1 text-xs">({cell.unit})</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {table.relatedMaterials && table.relatedMaterials.length > 0 && (
+                  <div className="px-4 py-2 bg-secondary/10 border-t border-border">
+                    <span className="text-xs text-muted-foreground">Related materials: </span>
+                    {table.relatedMaterials.map((mat, mi) => (
+                      <Badge key={mi} variant="secondary" className="text-xs mr-1">{mat}</Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </CollapsibleSection>
       )}

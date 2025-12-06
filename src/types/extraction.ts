@@ -14,6 +14,13 @@ export interface RawExtraction {
   materials: RawMaterial[];
   measurements: RawMeasurement[];
   affiliations: string[];
+  tables: RawTable[];
+}
+
+export interface RawTable {
+  pageNumber: number;
+  caption: string | null;
+  rawContent: string;
 }
 
 export interface RawAuthor {
@@ -59,7 +66,32 @@ export interface NormalizedExtraction {
   references: NormalizedReference[];
   materials: NormalizedMaterial[];
   measurements: NormalizedMeasurement[];
+  tables: ExtractedTable[];
   metadata: ExtractionMetadata;
+}
+
+export interface ExtractedTable {
+  tableId: string;
+  pageNumber: number;
+  caption: string | null;
+  headers: string[];
+  rows: TableRow[];
+  dataType: 'experimental' | 'comparative' | 'properties' | 'parameters' | 'other';
+  relatedMaterials: string[];
+  confidence: number;
+}
+
+export interface TableRow {
+  cells: TableCell[];
+}
+
+export interface TableCell {
+  value: string;
+  numericValue: number | null;
+  unit: string | null;
+  isHeader: boolean;
+  columnIndex: number;
+  rowIndex: number;
 }
 
 export interface NormalizedAuthor {
