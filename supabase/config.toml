@@ -1,0 +1,4 @@
+project_id = "ayyrxckmdhthdwbokgtp"
+
+[functions.extract-paper]
+verify_jwt = false
