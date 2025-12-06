@@ -31,6 +31,12 @@ interface RawMeasurement {
   conditions?: string;
 }
 
+interface RawTable {
+  pageNumber: number;
+  caption: string | null;
+  rawContent: string;
+}
+
 interface RawExtraction {
   title: string | null;
   authors: RawAuthor[];
@@ -46,6 +52,7 @@ interface RawExtraction {
   materials: RawMaterial[];
   measurements: RawMeasurement[];
   affiliations: string[];
+  tables: RawTable[];
 }
 
 // Parse GROBID TEI XML response
@@ -65,6 +72,7 @@ function parseGrobidXml(xmlText: string): RawExtraction {
     materials: [],
     measurements: [],
     affiliations: [],
+    tables: [],
   };
 
   // Extract title
@@ -143,6 +151,21 @@ function parseGrobidXml(xmlText: string): RawExtraction {
     });
   }
 
+  // Extract tables from GROBID XML
+  const tableMatches = xmlText.matchAll(/<figure[^>]*type="table"[^>]*>([\s\S]*?)<\/figure>/g);
+  let tableIndex = 0;
+  for (const match of tableMatches) {
+    const tableXml = match[1];
+    const captionMatch = tableXml.match(/<head>([^<]+)<\/head>/);
+    const contentMatch = tableXml.match(/<table[^>]*>([\s\S]*?)<\/table>/);
+    extraction.tables.push({
+      pageNumber: tableIndex + 1, // Approximate
+      caption: captionMatch ? captionMatch[1].trim() : null,
+      rawContent: contentMatch ? contentMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '',
+    });
+    tableIndex++;
+  }
+
   return extraction;
 }
 
@@ -171,6 +194,14 @@ For MEASUREMENTS:
 - Extract measurement conditions (temperature, pressure, etc.)
 - Assign confidence scores
 
+For TABLES:
+- Parse table data into structured rows and columns
+- Identify table type: experimental results, comparative data, material properties, process parameters
+- Extract numeric values with their units
+- Link table data to related materials mentioned
+- Classify each cell as header or data
+- Assign confidence scores based on data clarity
+
 For JOURNAL:
 - Provide standard abbreviation if known
 - Include ISSN if identifiable
@@ -195,7 +226,19 @@ DATE: ${rawExtraction.publicationDate || 'Unknown'}
 AFFILIATIONS:
 ${rawExtraction.affiliations.join('\n') || 'None listed'}
 
-Please also extract any materials and their properties from the abstract, and identify any numerical measurements with units.
+RAW TABLES (from GROBID extraction):
+${rawExtraction.tables.length > 0 
+  ? rawExtraction.tables.map((t, i) => `Table ${i + 1}${t.caption ? ` - "${t.caption}"` : ''}:\n${t.rawContent}`).join('\n\n')
+  : 'No tables found in extraction'}
+
+Parse the tables into structured format. For each table:
+1. Identify column headers
+2. Extract rows with cell values
+3. Detect numeric values and their units
+4. Classify the table type (experimental, comparative, properties, parameters, other)
+5. Link to any materials mentioned in the table
+
+Also extract any materials and their properties from the abstract, and identify any numerical measurements with units.
 
 Return a complete normalized JSON object.`;
 
@@ -324,10 +367,53 @@ Return a complete normalized JSON object.`;
                     required: ["property", "value", "unit", "confidence"],
                   },
                 },
+                tables: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      tableId: { type: "string" },
+                      pageNumber: { type: "number" },
+                      caption: { type: "string", nullable: true },
+                      headers: { type: "array", items: { type: "string" } },
+                      rows: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            cells: {
+                              type: "array",
+                              items: {
+                                type: "object",
+                                properties: {
+                                  value: { type: "string" },
+                                  numericValue: { type: "number", nullable: true },
+                                  unit: { type: "string", nullable: true },
+                                  isHeader: { type: "boolean" },
+                                  columnIndex: { type: "number" },
+                                  rowIndex: { type: "number" },
+                                },
+                                required: ["value", "isHeader", "columnIndex", "rowIndex"],
+                              },
+                            },
+                          },
+                          required: ["cells"],
+                        },
+                      },
+                      dataType: { 
+                        type: "string", 
+                        enum: ["experimental", "comparative", "properties", "parameters", "other"] 
+                      },
+                      relatedMaterials: { type: "array", items: { type: "string" } },
+                      confidence: { type: "number", minimum: 0, maximum: 1 },
+                    },
+                    required: ["tableId", "pageNumber", "headers", "rows", "dataType", "relatedMaterials", "confidence"],
+                  },
+                },
                 overallConfidence: { type: "number", minimum: 0, maximum: 1 },
                 warnings: { type: "array", items: { type: "string" } },
               },
-              required: ["title", "authors", "abstract", "keywords", "journal", "materials", "measurements", "overallConfidence", "warnings"],
+              required: ["title", "authors", "abstract", "keywords", "journal", "materials", "measurements", "tables", "overallConfidence", "warnings"],
             },
           },
         },
@@ -403,6 +489,7 @@ serve(async (req) => {
 
     const rawExtraction = parseGrobidXml(grobidXml);
     console.log("Raw extraction complete:", JSON.stringify(rawExtraction, null, 2).substring(0, 500));
+    console.log(`Found ${rawExtraction.tables.length} tables in document`);
 
     // Layer 2: LLM Normalization
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
