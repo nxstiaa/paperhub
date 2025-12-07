@@ -25,7 +25,7 @@ Visit [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) an
     ```bash
     npm run dev
     ```
-
+    
 ### Edit on GitHub
 - Open a file in the repo.
 - Click the pencil icon to edit.
@@ -41,12 +41,4 @@ Visit [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) an
 - Vite
 - TypeScript
 - React
-- Tailwind CSS & shadcn-ui
-
----
-
-## Deployment
-Publish your project via [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) → **Share → Publish**.
-
-## Custom Domain
-Connect a custom domain through Lovable’s publishing settings.
+- Tailwind CSS & shadcn-ui    
