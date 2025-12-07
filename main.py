@@ -11,7 +11,10 @@ from transformers import AutoModelForObjectDetection, AutoProcessor
 # --- Configuration ---
 INPUT_FOLDER = "/vol/bitbucket/nc624/paperHub/nature-insights-hub/data/PDFimages"
 OUTPUT_FOLDER = "/vol/bitbucket/nc624/paperHub/nature-insights-hub/data/output_tables"
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+BOXES_FOLDER = Path(OUTPUT_FOLDER) / "boxes"
+CROPS_FOLDER = Path(OUTPUT_FOLDER) / "crops"
+BOXES_FOLDER.mkdir(parents=True, exist_ok=True)
+CROPS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 # 1️⃣ Force CPU
 device = torch.device("cpu")
@@ -52,8 +55,7 @@ def rescale_bboxes(out_bbox, size):
     b = box_cxcywh_to_xyxy(out_bbox)
     return b * torch.tensor([img_w, img_h, img_w, img_h], dtype=torch.float32)
 
-def outputs_to_objects(outputs, img_size, id2label, score_threshold=0.5):
-    # Softmax to get predicted labels and scores
+def outputs_to_objects(outputs, img_size, id2label, score_threshold=0.8):
     probs = outputs.logits.softmax(-1)
     pred_scores, pred_labels = probs.max(-1)
     pred_labels = pred_labels[0].cpu().numpy()
@@ -87,13 +89,13 @@ def visualize_detected_tables(img, objects, out_path=None):
 
 def objects_to_crops(img, objects, padding=10):
     crops = []
-    for obj in objects:
+    for idx, obj in enumerate(objects, start=1):
         bbox = obj["bbox"]
         x0, y0, x1, y1 = [max(0, v) for v in (bbox[0]-padding, bbox[1]-padding, bbox[2]+padding, bbox[3]+padding)]
         crop_img = img.crop((x0, y0, x1, y1))
         if obj["label"] == "table rotated":
             crop_img = crop_img.rotate(270, expand=True)
-        crops.append(crop_img)
+        crops.append((idx, crop_img))
     return crops
 
 def sort_pages(files):
@@ -117,16 +119,16 @@ for img_file in image_files:
         outputs = model(pixel_values)
     
     # Extract detected objects
-    objects = outputs_to_objects(outputs, img_size, id2label, score_threshold=0.7)
+    objects = outputs_to_objects(outputs, img_size, id2label, score_threshold=0.8)
 
-    # Visualization
-    vis_path = Path(OUTPUT_FOLDER) / f"{img_file.stem}_boxes.png"
+    # 1️⃣ Save image with boxes drawn
+    vis_path = BOXES_FOLDER / f"{img_file.stem}_boxes.png"
     visualize_detected_tables(image, objects, vis_path)
 
-    # Crop tables
+    # 2️⃣ Save cropped tables separately
     crops = objects_to_crops(image, objects, padding=10)
-    for i, crop_img in enumerate(crops, start=1):
-        crop_path = Path(OUTPUT_FOLDER) / f"{img_file.stem}_table_{i}.jpg"
+    for idx, crop_img in crops:
+        crop_path = CROPS_FOLDER / f"{img_file.stem}_table_{idx}.jpg"
         crop_img.save(crop_path)
 
     print(f"Processed {img_file.name}: {len(objects)} tables detected")
